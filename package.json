@@ -6,6 +6,11 @@
   "type": "module",
   "main": "./dist/proxify.js",
   "types": "./dist/proxify.d.ts",
+  "homepage": "https://github.com/rhashimoto/proxify",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rhashimoto/proxify.git"
+  },
   "packageManager": "yarn@3.1.1",
   "scripts": {
     "build": "tsc",

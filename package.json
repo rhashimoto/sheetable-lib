@@ -1,6 +1,6 @@
 {
   "name": "@sheetable/proxify",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "RPC over MessageChannel",
   "license": "GPLv3",
   "type": "module",
@@ -13,7 +13,7 @@
   },
   "packageManager": "yarn@3.1.1",
   "scripts": {
-    "build": "tsc",
+    "prepack": "tsc",
     "test": "jasmine"
   },
   "devDependencies": {

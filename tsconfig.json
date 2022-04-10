@@ -1,0 +1,14 @@
+{
+  "include": ["src/*.ts"],
+  "compilerOptions": {
+    "allowJs": true,
+    "declaration": true,
+    "declarationMap": true,
+    "lib": ["ESNext", "DOM"],
+    "outDir": "dist",
+    "target": "ES2020"
+  },
+  "typeAcquisition": {
+    "include": ["jasmine"]
+  }
+}

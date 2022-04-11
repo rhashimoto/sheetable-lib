@@ -49,13 +49,13 @@ describe('proxify', function() {
   });
 
   it('should throw after port is closed', async function() {
-    const target = proxify(port1);
-    port1.close();
+    const target = function() { return 42; }
+    proxify(port1, target);
 
     const proxy = proxify(port2);
 
-    // Wait for the close to propagate.
-    await new Promise(resolve => {
+    // Watch for close of the port on the proxy side.
+    const portClosed = new Promise(resolve => {
       const close = port2.close;
       port2.close = function() {
         close.apply(port2);
@@ -63,8 +63,21 @@ describe('proxify', function() {
       };
     });
 
-    const result = proxy();
-    await expectAsync(result).toBeRejectedWithError(/closed/);
+    // Close the port on the target side. Notification will reach the
+    // proxy side in a subsequent task.
+    port1.close();
+
+    // Call the proxy before the notification arrives.
+    const resultA = proxy();
+
+    // Wait for the close to propagate.
+    await portClosed;
+
+    // Call the proxy after the notification arrives.
+    const resultB = proxy();
+
+    await expectAsync(resultA).toBeRejectedWithError(/closed/);
+    await expectAsync(resultB).toBeRejectedWithError(/closed/);
   });
 
   it('should transfer argument', async function() {
@@ -114,6 +127,7 @@ describe('proxify', function() {
   });
 
   it('should auto close', async function() {
+    // Watch for close of both ports.
     const target = new Promise(resolve => {
       const close = port1.close;
       port1.close = function() {
@@ -128,9 +142,13 @@ describe('proxify', function() {
         close.apply(this);
         resolve();
       }
+
+      // No reference is kept to the returned Proxy so it eventually
+      // should be garbage collected and trigger port closure.
       proxify(port2);
     });
 
+    // TODO: Find a way to trigger garbage collection to avoid delay.
     await expectAsync(target).toBeResolved();
     await expectAsync(proxy).toBeResolved();
   });

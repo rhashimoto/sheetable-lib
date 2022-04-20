@@ -1,5 +1,6 @@
 const TRANSFERABLES = new Set([MessagePort, ArrayBuffer]);
 const UNREACHABLE = Symbol();
+const PROXY_MARKER = '()=>{}';
 
 interface MessagePortLike {
   postMessage: (data: any, transferables?: Transferable[]) => void
@@ -37,7 +38,14 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
           return [obj, obj[property]];
         }, [null, target]);
 
-        const result = await member.apply(obj, data.args);
+        // Instantiate argument proxies.
+        const args = data.args.map(unwrap);
+
+        let result = await member.apply(obj, args);
+        if (typeof result === 'function') {
+          result = wrap(result);
+        }
+
         const transferables = new Set([
           TRANSFERABLES.has(result?.constructor) ? result : [],
           mapObjectToTransferables.get(result) ?? []
@@ -73,7 +81,8 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
 
       const callback = callbacks.get(data.id);
       if (data.hasOwnProperty('result')) {
-        callback.resolve(data.result);
+        const result =  unwrap(data.result);
+        callback.resolve(result);
       } else {
         callback.reject(Object.assign(new Error(), data.error));
       }
@@ -123,6 +132,10 @@ function makeProxy(port: MessagePortLike, parentProxy: any, path: (string|symbol
       return new Promise(function(resolve, reject) {
         const id = Math.random().toString(36).replace('0.', '');
         callbacks.set(id, { resolve, reject });
+
+        // Automatically proxy function arguments.
+        args = args.map(arg => typeof arg === 'function' ? wrap(arg) : arg);
+
         const transferables = new Set([
           args.filter(arg => TRANSFERABLES.has(arg?.constructor)),
           args.map(arg => mapObjectToTransferables.get(arg) ?? [])
@@ -134,7 +147,20 @@ function makeProxy(port: MessagePortLike, parentProxy: any, path: (string|symbol
   return proxy;
 }
 
- export function transfer(obj: any, transferables: Transferable[]) {
+export function transfer(obj: any, transferables: Transferable[]) {
   mapObjectToTransferables.set(obj, transferables);
   return obj;
+}
+
+export function wrap(obj: any) {
+  const { port1, port2 } = new MessageChannel();
+  proxify(port1, obj);
+  return transfer({
+    [PROXY_MARKER]: port2
+  }, [port2]);
+}
+
+function unwrap(obj: any) {
+  const port = obj?.[PROXY_MARKER];
+  return port instanceof MessagePort ? proxify(port) : obj;
 }

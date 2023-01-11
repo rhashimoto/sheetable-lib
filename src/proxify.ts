@@ -53,10 +53,9 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
         port.postMessage({ id, result }, [...transferables]);
       } catch (e) {
         // Error is not structured cloneable on all platforms.
-        const error = e instanceof Error ? {
-          message: e.message,
-          stack: e.stack
-        } : e;
+        const error = e instanceof Error ? 
+          Object.fromEntries(Object.getOwnPropertyNames(e).map(k => [k, e[k]])) :
+          e;
         port.postMessage({ id, error });
       }
     }

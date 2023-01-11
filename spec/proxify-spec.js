@@ -174,4 +174,24 @@ describe('proxify', function() {
     await expectAsync(target).toBeResolved();
     await expectAsync(proxy).toBeResolved();
   });
+
+  it('should pass Error properties', async function() {
+    function target() {
+      class MyError extends Error {
+        constructor(message) {
+          super(message);
+          this.extra = 'bar';
+        }
+      }
+      throw new MyError('foo');
+    }
+    proxify(port1, target);
+    const proxy = proxify(port2);
+
+    const result = proxy();
+    await expectAsync(result).toBeRejectedWithError('foo');
+
+    const error = await result.catch(e => e);
+    expect(error.extra).toBe('bar');
+  });
 });

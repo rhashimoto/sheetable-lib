@@ -19,6 +19,9 @@
     "prepack": "tsc",
     "test": "jasmine"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@types/jasmine": "^3.10.3",
     "jasmine": "^4.0.2",

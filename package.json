@@ -1,13 +1,14 @@
 {
   "name": "@sheetable/proxify",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "RPC over MessageChannel",
   "license": "GPLv3",
   "type": "module",
   "main": "./dist/proxify.js",
   "types": "./dist/proxify.d.ts",
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "src/proxify.ts"
   ],
   "homepage": "https://github.com/rhashimoto/proxify",
   "repository": {

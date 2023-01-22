@@ -1,5 +1,6 @@
 const AUTO_TRANSFERABLES = new Set([MessagePort]);
 const UNREACHABLE = Symbol();
+const PROXY_DETECTOR = Symbol();
 
 interface MessagePortLike {
   postMessage: (data: any, transferables?: Transferable[]) => void
@@ -82,7 +83,7 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
 }
 
 export function unproxify(proxyOrPort: any) {
-  const port: MessagePortLike = proxify[UNREACHABLE] ?
+  const port: MessagePortLike = proxyOrPort[PROXY_DETECTOR] ?
     mapProxyToPort.get(proxyOrPort) :
     proxyOrPort;
   closeProxifyPort(port);

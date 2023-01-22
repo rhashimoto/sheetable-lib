@@ -1,6 +1,6 @@
 import { proxify, unproxify, transfer } from '../dist/proxify.js';
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 30 * 1000;
+// jasmine.DEFAULT_TIMEOUT_INTERVAL = 30 * 1000;
 
 describe('proxify', function() {
   let port1, port2;
@@ -49,19 +49,18 @@ describe('proxify', function() {
   });
 
   it('should throw after port is closed', async function() {
+    const clientPortClosed = new Promise(resolve => {
+      const close = port2.close;
+      spyOn(port2, 'close').and.callFake(() => {
+        resolve();
+        return close.call(port2);
+      });
+    });
+
     const target = function() { return 42; }
     proxify(port1, target);
 
     const proxy = proxify(port2);
-
-    // Watch for close of the port on the proxy side.
-    const portClosed = new Promise(resolve => {
-      const close = port2.close;
-      port2.close = function() {
-        close.apply(port2);
-        resolve();
-      };
-    });
 
     // Close the port on the target side. Notification will reach the
     // proxy side in a subsequent task.
@@ -69,15 +68,38 @@ describe('proxify', function() {
 
     // Call the proxy before the notification arrives.
     const resultA = proxy();
+    expect(port2.close).not.toHaveBeenCalled();
 
     // Wait for the close to propagate.
-    await portClosed;
+    await clientPortClosed;
+    expect(port2.close).toHaveBeenCalled();
 
     // Call the proxy after the notification arrives.
     const resultB = proxy();
 
     await expectAsync(resultA).toBeRejectedWithError(/closed/);
     await expectAsync(resultB).toBeRejectedWithError(/closed/);
+  });
+
+  it('should close target port after client unproxify', async function() {
+    const targetPortClosed = new Promise(resolve => {
+      const close = port1.close;
+      spyOn(port1, 'close').and.callFake(() => {
+        resolve();
+        return close.call(port1);
+      });
+    });
+
+    const target = function() { return 42; }
+    proxify(port1, target);
+
+    const proxy = proxify(port2);
+
+    expect(port1.close).not.toHaveBeenCalled();
+
+    unproxify(proxy);
+    await expectAsync(targetPortClosed).toBeResolved();
+    expect(port1.close).toHaveBeenCalled();
   });
 
   it('should transfer argument', async function() {
@@ -127,30 +149,36 @@ describe('proxify', function() {
   });
 
   it('should auto close', async function() {
-    // Watch for close of both ports.
-    const target = new Promise(resolve => {
+    const targetPortClosed = new Promise(resolve => {
       const close = port1.close;
-      port1.close = function() {
-        close.apply(this);
+      spyOn(port1, 'close').and.callFake(() => {
         resolve();
-      }
-      proxify(port1, {});
+        return close.call(port1);
+      });
     });
-    const proxy = new Promise(resolve => {
+
+    const clientPortClosed = new Promise(resolve => {
       const close = port2.close;
-      port2.close = function() {
-        close.apply(this);
+      spyOn(port2, 'close').and.callFake(() => {
         resolve();
-      }
-
-      // No reference is kept to the returned Proxy so it eventually
-      // should be garbage collected and trigger port closure.
-      proxify(port2);
+        return close.call(port2);
+      });
     });
 
-    // TODO: Find a way to trigger garbage collection to avoid delay.
-    await expectAsync(target).toBeResolved();
-    await expectAsync(proxy).toBeResolved();
+    // No reference is kept to the returned Proxy so it eventually
+    // should be garbage collected and trigger port closure.
+    proxify(port1, {});
+    proxify(port2);
+
+    // Try to encourage garbage collection to happen.
+    let count = 0;
+    for (let i = 0; i < 64; ++i) {
+      const ab = new ArrayBuffer(2 ** 20);
+      count += ab.size;
+    }
+
+    await expectAsync(targetPortClosed).toBeResolved();
+    await expectAsync(clientPortClosed).toBeResolved();
   });
 
   it('should pass Error properties', async function() {

@@ -1,4 +1,4 @@
-import { proxify, transfer, wrap } from '../dist/proxify.js';
+import { proxify, unproxify, transfer } from '../dist/proxify.js';
 
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 30 * 1000;
 
@@ -9,8 +9,8 @@ describe('proxify', function() {
   });
 
   afterEach(function() {
-    port1.close();
-    port2.close();
+    unproxify(port1);
+    unproxify(port2);
   });
 
   it('should call a function target', async function() {
@@ -35,28 +35,6 @@ describe('proxify', function() {
 
     const result = proxy.add(1, 2);
     await expectAsync(result).toBeResolvedTo(3);
-  });
-
-  it('should pass a function argument', async function() {
-    function target(f, ...args) {
-      return f(...args);
-    }
-    proxify(port1, target);
-    const proxy = proxify(port2);
-
-    const result = proxy((a, b) => a + b, 1, 2);
-    await expectAsync(result).toBeResolvedTo(3);
-  });
-
-  it('should return a function result', async function() {
-    function target() {
-      return (a, b) => a + b;
-    }
-    proxify(port1, target);
-    const proxy = proxify(port2);
-
-    const result = await proxy();
-    await expectAsync(result(1, 2)).toBeResolvedTo(3);
   });
 
   it('should propagate Error', async function() {
@@ -87,7 +65,7 @@ describe('proxify', function() {
 
     // Close the port on the target side. Notification will reach the
     // proxy side in a subsequent task.
-    port1.close();
+    unproxify(port1);
 
     // Call the proxy before the notification arrives.
     const resultA = proxy();

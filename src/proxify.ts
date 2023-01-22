@@ -1,6 +1,5 @@
 const TRANSFERABLES = new Set([MessagePort, ArrayBuffer]);
 const UNREACHABLE = Symbol();
-const PROXY_MARKER = '()=>{}';
 
 interface MessagePortLike {
   postMessage: (data: any, transferables?: Transferable[]) => void
@@ -15,19 +14,19 @@ type PromiseCallbacks = { resolve: (value: unknown) => void, reject: (reason?: a
 
 const mapPortToPromiseCallbacks = new WeakMap<MessagePortLike, Map<string, PromiseCallbacks>>();
 const mapObjectToTransferables = new WeakMap<any, Transferable[]>();
+const mapProxyToPort = new WeakMap<any, MessagePortLike>();
 
 // Close port when proxy is garbage collected.
 const registry = new FinalizationRegistry(function(port: MessagePortLike) {
-  port.close?.();
+  closeProxifyPort(port);
 });
 
 export function proxify(port: MessagePortLike, target?: Function|object) {
   port.start?.();
-  const close = port.close;
   if (target) {
     async function listener({ data }) {
       if (data.close) {
-        port.close();
+        closeProxifyPort(port);
         return;
       }
 
@@ -54,21 +53,14 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
       }
     }
     port.addEventListener('message', listener);
-
-    // When the port is closed, notify the other endpoint and remove
-    // the listener so the target is no longer referenced.
-    port.close = function() {
-      port.postMessage({ close: true });
-      close?.apply(port);
-      port.removeEventListener('message', listener);
-    };
+    return port;
   } else {
     // Create map to match a response with Promise callbacks.
     const callbacks = new Map();
     mapPortToPromiseCallbacks.set(port, callbacks);
     function listener({ data }) {
       if (data.close) {
-        port.close();
+        closeProxifyPort(port);
         return;
       }
 
@@ -82,26 +74,23 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
     }
     port.addEventListener('message', listener);
 
-    // Override the close method to notify the other endpoint.
-    port.close = function() {
-      port.postMessage({ close: true });
-      close?.apply(port);
-      port.removeEventListener('message', listener);
-
-      // Reject any outstanding calls.
-      const callbacks = mapPortToPromiseCallbacks.get(port);
-      if (callbacks) {
-        for (const callback of callbacks.values()) {
-          callback.reject(new Error('port closed'));
-        }
-        mapPortToPromiseCallbacks.delete(port);
-      }
-    };
-
     const proxy = makeProxy(port, null, []);
     registry.register(proxy, port);
+    mapProxyToPort.set(proxy, port);
     return proxy;
   }
+}
+
+export function unproxify(proxyOrPort: any) {
+  const port: MessagePortLike = proxify[UNREACHABLE] ?
+    mapProxyToPort.get(proxyOrPort) :
+    proxyOrPort;
+  closeProxifyPort(port);
+}
+
+export function transfer(obj: any, transferables: Transferable[]) {
+  mapObjectToTransferables.set(obj, transferables);
+  return obj;
 }
 
 function makeProxy(port: MessagePortLike, parentProxy: any, path: (string|symbol)[]) {
@@ -136,7 +125,16 @@ function makeProxy(port: MessagePortLike, parentProxy: any, path: (string|symbol
   return proxy;
 }
 
-export function transfer(obj: any, transferables: Transferable[]) {
-  mapObjectToTransferables.set(obj, transferables);
-  return obj;
+function closeProxifyPort(port: MessagePortLike) {
+  port.postMessage({ close: true });
+  port.close?.();
+
+  // Reject any outstanding calls.
+  const callbacks = mapPortToPromiseCallbacks.get(port);
+  if (callbacks) {
+    for (const callback of callbacks.values()) {
+      callback.reject(new Error('port closed'));
+    }
+    mapPortToPromiseCallbacks.delete(port);
+  }
 }

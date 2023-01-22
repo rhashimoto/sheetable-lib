@@ -1,6 +1,6 @@
 {
   "name": "@sheetable/proxify",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "RPC over MessageChannel",
   "license": "GPLv3",
   "type": "module",

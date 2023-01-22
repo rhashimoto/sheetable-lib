@@ -1,4 +1,4 @@
-const TRANSFERABLES = new Set([MessagePort, ArrayBuffer]);
+const AUTO_TRANSFERABLES = new Set([MessagePort]);
 const UNREACHABLE = Symbol();
 
 interface MessagePortLike {
@@ -40,7 +40,7 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
         let result = await member.apply(obj, data.args);
 
         const transferables = new Set([
-          TRANSFERABLES.has(result?.constructor) ? result : [],
+          AUTO_TRANSFERABLES.has(result?.constructor) ? result : [],
           mapObjectToTransferables.get(result) ?? []
         ].flat());
         port.postMessage({ id, result }, [...transferables]);
@@ -115,7 +115,7 @@ function makeProxy(port: MessagePortLike, parentProxy: any, path: (string|symbol
         callbacks.set(id, { resolve, reject });
 
         const transferables = new Set([
-          args.filter(arg => TRANSFERABLES.has(arg?.constructor)),
+          args.filter(arg => AUTO_TRANSFERABLES.has(arg?.constructor)),
           args.map(arg => mapObjectToTransferables.get(arg) ?? [])
         ].flat(Infinity));
         port.postMessage({ id, path, args }, [...transferables]);

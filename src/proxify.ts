@@ -87,13 +87,10 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
       port.removeEventListener('message', listener);
     
       // Reject any outstanding calls.
-      const callbacks = mapPortToPromiseCallbacks.get(port);
-      if (callbacks) {
-        for (const callback of callbacks.values()) {
-          callback.reject(new Error('port closed'));
-        }
-        mapPortToPromiseCallbacks.delete(port);
+      for (const callback of callbacks.values()) {
+        callback.reject(new Error('port closed'));
       }
+      mapPortToPromiseCallbacks.delete(port);
     });
 
     const proxy = makeProxy(port, null, []);

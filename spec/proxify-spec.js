@@ -200,4 +200,15 @@ describe('proxify', function() {
     const error = await result.catch(e => e);
     expect(error.extra).toBe('bar');
   });
+
+  it('should throw if return value is not structured cloneable', async function() {
+    function target() {
+      return { foo() {} };
+    }
+    proxify(port1, target);
+    const proxy = proxify(port2);
+
+    const result = proxy();
+    await expectAsync(result).toBeRejectedWithError();
+  });
 });

@@ -132,6 +132,7 @@ function buildProxy(port: MessagePortLike) {
   const proxy = createProxy(null, []);
   finalization.register(proxy, abortController);
   mapAbortControllers.set(proxy, abortController);
+  mapAbortControllers.set(port, abortController);
   return proxy;
 }
 

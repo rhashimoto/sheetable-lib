@@ -1,26 +1,18 @@
-const AUTO_TRANSFERABLES = new Set([MessagePort]);
-const UNREACHABLE = Symbol();
-const PROXY_DETECTOR = Symbol();
-
 interface MessagePortLike {
   postMessage: (data: any, transferables?: Transferable[]) => void
-  addEventListener: (type: "message", listener: (event: MessageEvent<any>) => void) => void
+  addEventListener: (type: "message", listener: (event: MessageEvent<any>) => void, options?) => void
   removeEventListener: (type: "message", listener: (event: MessageEvent<any>) => void) => void
 
   start?: () => void
   close?: () => void
 }
 
-type PromiseCallbacks = { resolve: (value: unknown) => void, reject: (reason?: any) => void };
-
-const mapPortToPromiseCallbacks = new WeakMap<MessagePortLike, Map<string, PromiseCallbacks>>();
-const mapPortToReleaser = new WeakMap<MessagePortLike, () => void>();
 const mapObjectToTransferables = new WeakMap<any, Transferable[]>();
-const mapProxyToPort = new WeakMap<any, MessagePortLike>();
+const mapAbortControllers = new WeakMap<any, AbortController>();
 
-// Close port when proxy is garbage collected.
-const registry = new FinalizationRegistry(function(port: MessagePortLike) {
-  closeProxifyPort(port);
+// Clean up when proxy is garbage collected.
+const finalization = new FinalizationRegistry(function(abortController: AbortController) {
+  abortController.abort();
 });
 
 /**
@@ -30,74 +22,9 @@ const registry = new FinalizationRegistry(function(port: MessagePortLike) {
  */
 export function proxify(port: MessagePortLike, target?: Function|object) {
   port.start?.();
-  if (target) {
-    async function listener({ data }: MessageEvent) {
-      if (data.close) {
-        closeProxifyPort(port);
-        return;
-      }
-
-      const id = data.id;
-      try {
-        // Dereference the member path.
-        const [obj, member] = data.path.reduce(([_, obj], property) => {
-          return [obj, obj[property]];
-        }, [null, target]);
-
-        let result = await member.apply(obj, data.args);
-
-        const transferables = new Set([
-          AUTO_TRANSFERABLES.has(result?.constructor) ? result : [],
-          mapObjectToTransferables.get(result) ?? []
-        ].flat());
-        port.postMessage({ id, result }, [...transferables]);
-      } catch (e) {
-        // Error is not structured cloneable on all platforms.
-        const error = e instanceof Error ? 
-          Object.fromEntries(Object.getOwnPropertyNames(e).map(k => [k, e[k]])) :
-          e;
-        port.postMessage({ id, error });
-      }
-    }
-    port.addEventListener('message', listener);
-    mapPortToReleaser.set(port, () => {
-      port.removeEventListener('message', listener);
-    });
-    return port;
-  } else {
-    // Create map to match a response with Promise callbacks.
-    const callbacks = new Map();
-    mapPortToPromiseCallbacks.set(port, callbacks);
-    function listener({ data }: MessageEvent) {
-      if (data.close) {
-        closeProxifyPort(port);
-        return;
-      }
-
-      const callback = callbacks.get(data.id);
-      if (data.hasOwnProperty('result')) {
-        callback.resolve(data.result);
-      } else {
-        callback.reject(Object.assign(new Error(), data.error));
-      }
-      callbacks.delete(data.id);
-    }
-    port.addEventListener('message', listener);
-    mapPortToReleaser.set(port, () => {
-      port.removeEventListener('message', listener);
-    
-      // Reject any outstanding calls.
-      for (const callback of callbacks.values()) {
-        callback.reject(new Error('port closed'));
-      }
-      mapPortToPromiseCallbacks.delete(port);
-    });
-
-    const proxy = makeProxy(port, null, []);
-    registry.register(proxy, port);
-    mapProxyToPort.set(proxy, port);
-    return proxy;
-  }
+  return target ?
+    buildTarget(port, target) :
+    buildProxy(port);
 }
 
 /**
@@ -105,10 +32,8 @@ export function proxify(port: MessagePortLike, target?: Function|object) {
  * @param proxyOrPort 
  */
 export function unproxify(proxyOrPort: MessagePortLike|any) {
-  const port: MessagePortLike = proxyOrPort[PROXY_DETECTOR] ?
-    mapProxyToPort.get(proxyOrPort) :
-    proxyOrPort;
-  closeProxifyPort(port);
+  mapAbortControllers.get(proxyOrPort)?.abort();
+  mapAbortControllers.delete(proxyOrPort);
 }
 
 /**
@@ -122,41 +47,110 @@ export function transfer(obj: any, transferables: Transferable[]) {
   return obj;
 }
 
-function makeProxy(port: MessagePortLike, parentProxy: any, path: (string|symbol)[]) {
-  const proxy = new Proxy(function(){}, {
-    get(_, property, receiver) {
-      // The only reason for this is to prevent garbage collection of
-      // the root proxy while any related proxies are in use.
-      if (property === UNREACHABLE) return parentProxy;
+function buildTarget(port: MessagePortLike, target: Function|object) {
+  const abortController = new AbortController();
+  port.addEventListener('message', async function({ data }: MessageEvent) {
+    if (data.close) return abortController.abort();
 
-      // Avoid confusing a proxy with a Promise, e.g. on return from
-      // an async function.
-      if (property === 'then') return undefined;
+    try {
+      // Dereference the member path.
+      const [obj, member] = data.path.reduce(([_, obj], property) => {
+        return [obj, obj[property]];
+      }, [null, target]);
 
-      return makeProxy(port, receiver, [...path, property]);
-    },
+      const result = await member.apply(obj, data.args);
+      const transferables = mapObjectToTransferables.get(result) ?? []
+      port.postMessage({ id: data.id, result }, transferables);
+    } catch (e) {
+      port.postMessage({ id: data.id, error: cvtErrorToCloneable(e) });
+    }
+  }, { signal: abortController.signal });
 
-    apply(_, __, args) {
-      const callbacks = mapPortToPromiseCallbacks.get(port);
-      if (!callbacks) return Promise.reject(new Error('port closed'));
-      return new Promise(function(resolve, reject) {
-        const id = Math.random().toString(36).replace('0.', '');
-        callbacks.set(id, { resolve, reject });
+  abortController.signal.addEventListener('abort', function() {
+    port.postMessage({ close: true });
+    port.close?.();
+  });
+  mapAbortControllers.set(port, abortController);
+}
 
-        const transferables = new Set([
-          args.filter(arg => AUTO_TRANSFERABLES.has(arg?.constructor)),
-          args.map(arg => mapObjectToTransferables.get(arg) ?? [])
-        ].flat(Infinity));
-        port.postMessage({ id, path, args }, [...transferables]);
-      });
+function buildProxy(port: MessagePortLike) {
+  type PromiseCallbacks = { resolve: (value: unknown) => void, reject: (reason?: any) => void };
+  const callbacks = new Map<string, PromiseCallbacks>();
+  const abortController = new AbortController();
+  port.addEventListener('message', function({ data }: MessageEvent) {
+    if (data.close) return abortController.abort();
+
+    // Settle the appropriate Promise.
+    const callback = callbacks.get(data.id);
+    if (data.hasOwnProperty('result')) {
+      callback.resolve(data.result);
+    } else {
+      callback.reject(cvtCloneableToError(data.error));
+    }
+    callbacks.delete(data.id);
+  }, { signal: abortController.signal });
+
+  function createProxy(parentProxy: any, path: (string|symbol)[]) {
+    return new Proxy(function(){}, {
+      get(_, property, receiver) {
+        // This line does nothing except prevent garbage collection of
+        // the root proxy - which would trigger port closure by the
+        // FinalizationRegistry - while any related proxies are in use.
+        if (parentProxy === '') return;
+
+        // Avoid confusing a proxy with a Promise, e.g. on return from
+        // an async function.
+        if (property === 'then') return undefined;
+
+        return createProxy(receiver, [...path, property]);
+      },
+
+      apply(_, __, args) {
+        if (abortController.signal.aborted) return Promise.reject(new Error('port closed'));
+
+        return new Promise(function(resolve, reject) {
+          const id = Math.random().toString(36).slice(2);
+          callbacks.set(id, { resolve, reject });
+
+          const transferables = new Set(args.map(arg => {
+            return mapObjectToTransferables.get(arg) ?? [];
+          }).flat());
+          port.postMessage({ id, path, args }, [...transferables]);
+        });
+      }
+    });
+  }
+
+  abortController.signal.addEventListener('abort', function() {
+    port.postMessage({ close: true });
+    port.close?.();
+    for (const callback of callbacks.values()) {
+      callback.reject(new Error('port closed'));
     }
   });
+
+  const proxy = createProxy(null, []);
+  finalization.register(proxy, abortController);
+  mapAbortControllers.set(proxy, abortController);
   return proxy;
 }
 
-function closeProxifyPort(port: MessagePortLike) {
-  port.postMessage({ close: true });
-  port.close?.();
-  mapPortToReleaser.get(port)?.();
-  mapPortToReleaser.delete(port);
+// Some browsers won't structured clone Error, so convert to POJO.
+function cvtErrorToCloneable(e: any) {
+  if (e instanceof Error) {
+    const props = new Set([
+      ...['name', 'message', 'stack'].filter(k => e[k] !== undefined),
+      ...Object.getOwnPropertyNames(e)
+    ]);
+    return Object.fromEntries(Array.from(props, k => [k, e[k]]));
+  }
+  return e;
+}
+
+// Reconstruct Error from POJO.
+function cvtCloneableToError(e: any) {
+  if (Object.hasOwn(e, 'message')) {
+    return Object.assign(new Error(e.message), e);
+  }
+  return e;
 }

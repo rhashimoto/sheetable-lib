@@ -2,6 +2,7 @@ interface MessagePortLike {
   postMessage: (data: any, transferables?: Transferable[]) => void
   addEventListener: (type: "message", listener: (event: MessageEvent<any>) => void, options?) => void
   removeEventListener: (type: "message", listener: (event: MessageEvent<any>) => void) => void
+  dispatchEvent?: (event: Event) => boolean
 
   start?: () => void
   close?: () => void
@@ -69,6 +70,7 @@ function buildTarget(port: MessagePortLike, target: Function|object) {
   abortController.signal.addEventListener('abort', function() {
     port.postMessage({ close: true });
     port.close?.();
+    port.dispatchEvent?.(new Event('close'));
   });
   mapAbortControllers.set(port, abortController);
 }
@@ -124,6 +126,7 @@ function buildProxy(port: MessagePortLike) {
   abortController.signal.addEventListener('abort', function() {
     port.postMessage({ close: true });
     port.close?.();
+    port.dispatchEvent?.(new Event('close'));
     for (const callback of callbacks.values()) {
       callback.reject(new Error('port closed'));
     }

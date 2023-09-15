@@ -148,11 +148,16 @@ function cvtErrorToCloneable(e: any) {
       ...['name', 'message', 'stack'].filter(k => e[k] !== undefined),
       ...Object.getOwnPropertyNames(e)
     ]);
-    return Object.fromEntries(Array.from(props, k => {
-      return [k, e[k]];
-    }).filter(([_, v]) => {
-      return typeof v !== 'function';
-    }));
+    return Object.fromEntries(Array.from(props, k =>  [k, e[k]])
+      .filter(([_, v]) => {
+        // Skip any non-cloneable properties.
+        try {
+          structuredClone(v);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }));
   }
   return e;
 }

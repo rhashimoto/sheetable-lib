@@ -168,12 +168,13 @@ describe('proxify', function() {
     // No reference is kept to the returned Proxy so it eventually
     // should be garbage collected and trigger port closure.
     proxify(port1, {});
-    proxify(port2);
+    proxify(port2).a.b.c;
 
-    // Try to encourage garbage collection to happen.
+    // Try to encourage garbage collection to happen. GC is not guaranteed
+    // so this test may need to be modified or disregarded on some platforms.
     let count = 0;
-    for (let i = 0; i < 64; ++i) {
-      const ab = new ArrayBuffer(2 ** 20);
+    for (let i = 0; i < 4096; ++i) {
+      const ab = new ArrayBuffer(2 ** 16);
       count += ab.size;
     }
 
@@ -199,6 +200,22 @@ describe('proxify', function() {
 
     const error = await result.catch(e => e);
     expect(error.extra).toBe('bar');
+  });
+
+  it('should strip thrown Error methods', async function() {
+    function target() {
+      const e = new Error('foo');
+      e.method = () => {}
+      throw e;
+    }
+
+    proxify(port1, target);
+    const proxy = proxify(port2);
+    const result = proxy();
+    await expectAsync(result).toBeRejectedWithError('foo');
+
+    const error = await result.catch(e => e);
+    expect(error.method).toBeUndefined();
   });
 
   it('should throw if return value is not structured cloneable', async function() {

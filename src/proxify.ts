@@ -40,11 +40,13 @@ export function unproxify(proxyOrPort: MessagePortLike|any) {
 /**
  * Associate transferable items with an argument or return value.
  * @param obj object to be passed as an argument or return value
- * @param transferables array of transferable items within object
+ * @param transferables collection of transferable items within object
  * @returns obj
  */
-export function transfer(obj: any, transferables: Transferable[]) {
-  mapObjectToTransferables.set(obj, transferables);
+export function transfer(obj: any, transferables: Iterable<Transferable>) {
+  mapObjectToTransferables.set(
+    obj,
+    Array.isArray(transferables) ? transferables : [...transferables]);
   return obj;
 }
 
@@ -146,7 +148,11 @@ function cvtErrorToCloneable(e: any) {
       ...['name', 'message', 'stack'].filter(k => e[k] !== undefined),
       ...Object.getOwnPropertyNames(e)
     ]);
-    return Object.fromEntries(Array.from(props, k => [k, e[k]]));
+    return Object.fromEntries(Array.from(props, k => {
+      return [k, e[k]];
+    }).filter(([_, v]) => {
+      return typeof v !== 'function';
+    }));
   }
   return e;
 }

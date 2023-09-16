@@ -165,7 +165,15 @@ function cvtErrorToCloneable(e: any) {
 // Reconstruct Error from POJO.
 function cvtCloneableToError(e: any) {
   if (Object.hasOwn(e, 'message')) {
-    return Object.assign(new Error(e.message), e);
+    const error = new Error(e.message);
+    for (const [k, v] of Object.entries(e)) {
+      try {
+        error[k] = v;
+      } catch (e) {
+        // Ignore any properties that can't be set.
+      }
+    }
+    return error;
   }
   return e;
 }

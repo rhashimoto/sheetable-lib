@@ -1,8 +1,8 @@
 {
   "name": "@sheetable/lib",
   "version": "0.0.9",
-  "description": "RPC over MessageChannel",
-  "license": "GPLv3",
+  "description": "Extension support for sheetable",
+  "license": "MIT",
   "type": "module",
   "exports": {
     "./proxify.js": {
@@ -16,14 +16,14 @@
     "dist/**/*",
     "src/proxify.ts"
   ],
-  "homepage": "https://github.com/rhashimoto/proxify",
+  "homepage": "https://github.com/rhashimoto/sheetable-lib",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rhashimoto/proxify.git"
+    "url": "https://github.com/rhashimoto/sheetable-lib.git"
   },
   "packageManager": "yarn@3.3.1",
   "scripts": {
-    "prepack": "tsc",
+    "prepack": "node ./esbuild.mjs",
     "test": "jasmine"
   },
   "publishConfig": {
@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@types/jasmine": "^3.10.3",
-    "jasmine": "^4.0.2",
-    "typescript": "^4.6.3"
+    "esbuild": "^0.19.3",
+    "jasmine": "^4.0.2"
   }
 }

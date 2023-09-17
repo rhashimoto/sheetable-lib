@@ -1,4 +1,4 @@
-# @sheetable/proxify
+# @sheetable/lib
 This package wraps both MessagePort endpoints of a MessageChannel to proxy function and method calls.
 
 proxify is like [comlink](https://github.com/GoogleChromeLabs/comlink) but simplified
@@ -7,7 +7,7 @@ calling code is not trusted (e.g. from an iframe).
 
 ## Example usage:
 ```javascript
-import { proxify } from '@sheetable/proxify';
+import { proxify } from '@sheetable/lib/proxify.js';
 
 const receiver = {
   foo(message) {

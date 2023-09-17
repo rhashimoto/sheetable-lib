@@ -79,7 +79,7 @@ function buildTarget(port: MessagePortLike, target: Function|object) {
 
 function buildProxy(port: MessagePortLike) {
   type PromiseCallbacks = { resolve: (value: unknown) => void, reject: (reason?: any) => void };
-  const callbacks = new Map<string, PromiseCallbacks>();
+  const callbacks = new Map<number, PromiseCallbacks>();
   const abortController = new AbortController();
   port.addEventListener('message', function({ data }: MessageEvent) {
     if (data.close) return abortController.abort();
@@ -113,7 +113,7 @@ function buildProxy(port: MessagePortLike) {
         if (abortController.signal.aborted) return Promise.reject(new Error('port closed'));
 
         return new Promise(function(resolve, reject) {
-          const id = Math.random().toString(36).slice(2);
+          const id = Math.trunc(Math.random() * Number.MAX_SAFE_INTEGER);
           callbacks.set(id, { resolve, reject });
 
           const transferables = new Set(args.map(arg => {

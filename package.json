@@ -8,7 +8,8 @@
     "./proxify.js": {
       "import": "./dist/proxify.js",
       "types": "./dist/proxify.d.ts"
-    }
+    },
+    "./Spreadsheet.js": "./src/Spreadsheet.js"
   },
   "types": "./dist/proxify.d.ts",
   "files": [

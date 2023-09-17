@@ -5,11 +5,9 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    "./proxify.js": {
-      "import": "./dist/proxify.js",
-      "types": "./dist/proxify.d.ts"
-    },
-    "./Spreadsheet.js": "./src/Spreadsheet.js"
+    "./Spreadsheet.js": "./dist/Spreadsheet.js",
+    "./proxify.js": "./dist/proxify.js",
+    "./unboxed.js": "./dist/unboxed.js"
   },
   "types": "./dist/proxify.d.ts",
   "files": [

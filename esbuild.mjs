@@ -2,7 +2,9 @@ import * as esbuild from 'esbuild';
 
 const options = {
   entryPoints: [
-    'src/proxify.ts'
+    'src/Spreadsheet.js',
+    'src/proxify.ts',
+    'src/unboxed.js',
   ],
   bundle: true,
   format: 'esm',

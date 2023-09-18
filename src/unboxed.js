@@ -12,23 +12,26 @@ export function register(provideExtension) {
      * @param {string} clientId 
      * @returns {Promise<MessagePort>}
      */
-    async openPort(clientId) {
-      const { port1, port2 } = new MessageChannel();
-      mapIdToPort.set(clientId, port1);
+    async openPort(version, clientId) {
+      if (version === 1) {
+        const { port1, port2 } = new MessageChannel();
+        mapIdToPort.set(clientId, port1);
 
-      // Intercept proxify calls to configure MessagePort services
-      // before the call is invoked. This handler must be installed
-      // before calling proxify().
-      port1.addEventListener('message', (event) => {
-        if (Array.isArray(event.data.args)) {
-          const services = event.data.args.shift();
-          for (const [name, port] of services) {
-            globalThis[name] = proxify(port);
+        // Intercept proxify calls to configure MessagePort services
+        // before the call is invoked. This handler must be installed
+        // before calling proxify().
+        port1.addEventListener('message', (event) => {
+          if (Array.isArray(event.data.args)) {
+            const services = event.data.args.shift();
+            for (const [name, port] of services) {
+              globalThis[name] = proxify(port);
+            }
           }
-        }
-      });
-      proxify(port1, await provideExtension());
-      return transfer(port2, [port2]);
+        });
+        proxify(port1, await provideExtension());
+        return transfer(port2, [port2]);
+      }
+      throw new Error(`Unsupported unboxed protocol version ${version}`);
     },
 
     /**

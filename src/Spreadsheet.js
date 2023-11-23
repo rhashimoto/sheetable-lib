@@ -158,9 +158,9 @@ export class Sheet {
     // Ensure that the mappings are prepared.
     const maxColumnIndex = columnIndex + (columnCount ?? 0);
     if (maxColumnIndex > ALPHA1_COUNT) {
-      alpha2();
+      buildAlpha2();
       if (maxColumnIndex > ALPHA2_COUNT) {
-        alpha3();
+        buildAlpha3();
       }
     }
 
@@ -203,8 +203,8 @@ export class Sheet {
 
       // Ensure that the mappings are prepared.
       switch ((alphaY ?? alphaX).length) {
-        case 2: alpha2(); break;
-        case 3: alpha3(); break;
+        case 2: buildAlpha2(); break;
+        case 3: buildAlpha3(); break;
       }
 
       const columnIndex = mapAlphaToIndex.get(alphaX);
@@ -219,12 +219,10 @@ export class Sheet {
       return result;
     };
   })();
-
-
 }
 
 // Add A to Z.
-function alpha1() {
+function buildAlpha1() {
   for (let i = 0; i < ALPHABET.length; i++) {
     const index = mapIndexToAlpha.length;
     const alpha = ALPHABET[i];
@@ -232,10 +230,10 @@ function alpha1() {
     mapAlphaToIndex.set(alpha, index);
   }
 }
-alpha1();
+buildAlpha1();
 
 // Extend mapping to ZZ.
-function alpha2() {
+function buildAlpha2() {
   if (mapIndexToAlpha.length >= ALPHA2_COUNT) return;
 
   for (let i = 0; i < ALPHABET.length; i++) {
@@ -250,10 +248,10 @@ function alpha2() {
 }
 
 // Extend mapping to ZZZ.
-function alpha3() {
+function buildAlpha3() {
   if (mapIndexToAlpha.length >= ALPHA3_COUNT) return;
 
-  alpha2();
+  buildAlpha2();
   for (let i = 0; i < ALPHABET.length; i++) {
     const a0 = ALPHABET[i];
     for (let j = 0; j < ALPHABET.length; j++) {
